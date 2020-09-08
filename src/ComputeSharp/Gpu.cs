@@ -5,6 +5,7 @@ using System.Linq;
 using ComputeSharp.Graphics;
 using ComputeSharp.Graphics.Helpers;
 using Vortice.Direct3D12;
+using Vortice.Direct3D12.Debug;
 using Vortice.DXGI;
 
 namespace ComputeSharp
@@ -19,6 +20,8 @@ namespace ComputeSharp
         /// </summary>
         static Gpu()
         {
+            D3D12.D3D12GetDebugInterface<ID3D12Debug>().EnableDebugLayer();
+
             Devices = DeviceHelper.QueryAllSupportedDevices();
             IsSupported = Devices.Any();
 

@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Globalization;
-using System.Linq;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace ComputeSharp.Sample
@@ -10,45 +9,51 @@ namespace ComputeSharp.Sample
         static void Main()
         {
             // Create the graphics buffer
-            int width = 10;
-            int height = 10;
-            float[] array = new float[width * height];
+            int[] array = new int[512 * 512];
+
             for (int i = 0; i < array.Length; i++)
             {
-                array[i] = i + 1;
+                array[i] = i;
             }
 
-            // Print the initial matrix
-            Console.WriteLine("===================== BEFORE =====================");
-            PrintMatrix(array, width, height);
-            Console.WriteLine("==================================================");
-            Console.WriteLine();
+            int[] expected = new int[array.Length];
 
-            using ReadWriteBuffer<float> gpuBuffer = Gpu.Default.AllocateReadWriteBuffer(array);
+            for (int i = 0; i < expected.Length; i++)
+            {
+                expected[i] = i * 2;
+            }
 
-            // Run the shader
-            Gpu.Default.For(100, new MainKernel(width, gpuBuffer));
+            int[] copy = new int[array.Length];
 
-            // Get the data back
-            gpuBuffer.GetData(array);
+            for (int i = 0;;i++)
+            {
+                Console.WriteLine(i);
 
-            // Print the updated matrix
-            Console.WriteLine("===================== AFTER ======================");
-            PrintMatrix(array, width, height);
-            Console.WriteLine("==================================================");
+                using ReadWriteBuffer<int> gpuBuffer = Gpu.Default.AllocateReadWriteBuffer(array);
+
+                var kernel = new MainKernel(512, gpuBuffer);
+
+                Gpu.Default.For(512, kernel);
+
+                gpuBuffer.GetData(copy);
+
+                if (!copy.AsSpan().SequenceEqual(expected))
+                {
+                    Debugger.Break();
+
+                    throw new InvalidOperationException("No match :(");
+                }
+            }
         }
 
-        /// <summary>
-        /// Kernel for <see cref="Main"/>
-        /// </summary>
         private readonly struct MainKernel : IComputeShader
         {
             private readonly int width;
 
-            private readonly ReadWriteBuffer<float> buffer;
+            private readonly ReadWriteBuffer<int> buffer;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public MainKernel(int width, ReadWriteBuffer<float> buffer)
+            public MainKernel(int width, ReadWriteBuffer<int> buffer)
             {
                 this.width = width;
                 this.buffer = buffer;
@@ -57,30 +62,12 @@ namespace ComputeSharp.Sample
             /// <inheritdoc/>
             public void Execute(ThreadIds ids)
             {
-                int offset = ids.X + ids.Y * width;
-                buffer[offset] *= 2;
-            }
-        }
+                int offset = ids.X * width;
 
-        /// <summary>
-        /// Prints a matrix in a properly formatted way
-        /// </summary>
-        /// <param name="array">The input <see langword="float"/> array representing the matrix to print</param>
-        /// <param name="width">The width of the array to print</param>
-        /// <param name="height">The height of the array to print</param>
-        private static void PrintMatrix(float[] array, int width, int height)
-        {
-            int length = width * height;
-            int numberWidth = array.Max().ToString(CultureInfo.InvariantCulture).Length;
-            ref float r = ref array[0];
-
-            for (int i = 0; i < length; i++)
-            {
-                Console.Write(r.ToString(CultureInfo.InvariantCulture).PadLeft(numberWidth));
-                r = ref Unsafe.Add(ref r, 1);
-
-                if (i < length - 1) Console.Write(", ");
-                if (i > 0 && (i + 1) % width == 0) Console.WriteLine();
+                for (int i = 0; i < width; i++)
+                {
+                    buffer[offset + i] *= 2;
+                }
             }
         }
     }
