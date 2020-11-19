@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using BenchmarkDotNet.Attributes;
 
 namespace ComputeSharp.Benchmark
@@ -9,6 +10,7 @@ namespace ComputeSharp.Benchmark
     /// <summary>
     /// A <see langword="class"/> that benchmarks the APIs in the <see cref="Dnn"/> class, on both CPU and GPU
     /// </summary>
+    [MemoryDiagnoser]
     public class DnnBenchmark : IDisposable
     {
         /// <summary>
@@ -19,17 +21,17 @@ namespace ComputeSharp.Benchmark
         /// <summary>
         /// The nummber of rows in the <see cref="X"/> matrix
         /// </summary>
-        private const int N = 512;
+        private const int N = 256;
 
         /// <summary>
         /// The number of columns in the <see cref="X"/> matrix (same as the number of rows in the <see cref="W"/> matrix)
         /// </summary>
-        private const int M = 512;
+        private const int M = 256;
 
         /// <summary>
         /// The number of columns in the <see cref="W"/> matrix
         /// </summary>
-        private const int P = 256;
+        private const int P = 128;
 
         /// <summary>
         /// The input tensor
@@ -91,6 +93,22 @@ namespace ComputeSharp.Benchmark
             BufferW = Gpu.Default.AllocateReadOnlyBuffer(W);
             BufferB = Gpu.Default.AllocateReadOnlyBuffer(B);
             BufferY = Gpu.Default.AllocateReadWriteBuffer(Y);
+
+            // Precompile the shader
+            for (int i = 0; i < 10; i++)
+            {
+                GpuWithTemporaryBuffers();
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+
+                Thread.Sleep(100);
+            }
+
+            Thread.Sleep(1000);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         /// <summary>
@@ -128,12 +146,6 @@ namespace ComputeSharp.Benchmark
         }
 
         /// <summary>
-        /// Runs a fully connected forward operation on the CPU
-        /// </summary>
-        [Benchmark(Baseline = true)]
-        public void Cpu() => Dnn.FullyConnectedForwardCpu(C, N, M, P, X, W, B, Y);
-
-        /// <summary>
         /// Runs a fully connected forward operation on the GPU
         /// </summary>
         [Benchmark]
@@ -142,7 +154,7 @@ namespace ComputeSharp.Benchmark
         /// <summary>
         /// Runs a fully connected forward operation on the GPU, creating temporary GPU buffers to perform the operations
         /// </summary>
-        [Benchmark]
+        //[Benchmark]
         public void GpuWithTemporaryBuffers()
         {
             using ReadOnlyBuffer<float> x = Gpu.Default.AllocateReadOnlyBuffer(X);
